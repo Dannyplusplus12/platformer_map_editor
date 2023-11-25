@@ -19,7 +19,7 @@ AUTO_TILE_MAP = {
 BASE_IMG_PATH = 'assets/imgs/'
 PHYSIC_TILES = ['ground_1/type_1', 'ground_1/type_2', 'ground_2', 'black']
 PALLET_TILES = ['pallet']
-AUTO_TILE_TYPES = ['ground_1/type_1', 'ground_1/type_2', 'ground_2']
+AUTO_TILE_TYPES = ['ground_1/type_1']
 
 INDEX = 3
 RENDER_SCALE = 1.6
@@ -47,28 +47,18 @@ class Map:
 	def __init__(self, game, tile_size = 16):
 		self.game = game
 		self.tile_size = tile_size
-		# self.tile_map = {}
-		# self.hitboxs = {}
-		# self.offgrid_tiles = []
-		# self.cmtrees = []
-		# self.player_pos = [0, 0]
-		self.map = {
-			'special': [],
-			'physic': {},
-		}
+
+		try:
+			self.map = self.load('map/' + str(INDEX) + '.json')
+		except:
+			self.map = {
+				'special': [],
+				'physic': {},
+			}
 
 	def save(self, path):
 		f = open(path, 'w')
-		json.dump({
-			'1': {
-				'tile_map': self.tile_map,
-				'tile_size': self.tile_size,
-				'offgrid': self.offgrid_tiles,
-				'hitboxs': self.hitboxs,
-				},
-			'cmtrees': self.cmtrees,
-			'player': [self.player_pos[0], self.player_pos[1]]
-		}, f)
+		json.dump(self.map, f)
 		f.close()
 
 	def load(self, path):
@@ -76,27 +66,68 @@ class Map:
 		map_data = json.load(f)
 		f.close()
 
-		self.tile_map = map_data['tile_map']
-		self.tile_size = map_data['tile_size']
-		self.offgrid_tiles = map_data['offgrid']
-		self.cmtrees = map_data['cmtrees']
-		self.gift_left = len([loc for loc in self.cmtrees if loc['index'] == 0])
-		self.player_pos = map_data['player']
+		return map_data
 
 
-	def auto_tile(self):
-		for loc in self.tile_map:
-			tile = self.tile_map[loc]
+	def auto_tile(self, layer, pos, tile_type):
+
+		if(not str(pos[0]) + '; ' + str(pos[1]) in self.map[str(layer)]['grid']):
+			return
+
+		area = [pos]
+		queue = [pos]
+		while(len(queue)):
+			top = queue[0]
+			queue.pop(0)
+
+			for offset in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+				neighbor = (top[0] + offset[0], top[1] + offset[1])
+				if(str(neighbor[0]) + '; ' + str(neighbor[1]) in self.map[str(layer)]['grid']):
+					if(self.map[str(layer)]['grid'][str(neighbor[0]) + '; ' + str(neighbor[1])]['type'] == tile_type):
+						exits = False
+						for x in area:
+							if(neighbor[0] == x[0] and neighbor[1] == x[1]):
+								exits = True
+						if(not exits):
+							area.append(neighbor)
+							queue.append(neighbor)
+
+		for loc in area:
+			tile = self.map[str(layer)]['grid'][str(loc[0]) + '; ' + str(loc[1])]
 			neighbors = set()
 			for shift in [(1, 0), (0, 1), (-1, 0), (0, -1)]:
 				check_loc = str(tile['pos'][0] + shift[0]) + '; ' + str(tile['pos'][1] + shift[1])
-				if(check_loc in self.tile_map):
-					if self.tile_map[check_loc]['type'] == tile['type']:
+				if(check_loc in self.map[str(layer)]['grid']):
+					if self.map[str(layer)]['grid'][check_loc]['type'] == tile['type']:
 						neighbors.add(shift)
 			neighbors = tuple(sorted(neighbors))
 			if(tile['type'] in AUTO_TILE_TYPES) and (neighbors in AUTO_TILE_MAP):
 				tile['index'] = AUTO_TILE_MAP[neighbors]
 
+	def auto_fill(self, layer, pos, tile_type, index):
+
+		if(str(pos[0]) + '; ' + str(pos[1]) in self.map[str(layer)]['grid']):
+			return
+
+		area = [pos]
+		queue = [pos]
+		while(len(queue)):
+			top = queue[0]
+			queue.pop(0)
+
+			for offset in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+				neighbor = (top[0] + offset[0], top[1] + offset[1])
+				exits = False
+				for x in area:
+					if(neighbor[0] == x[0] and neighbor[1] == x[1]):
+						exits = True
+				loc = (str(neighbor[0]) + '; ' + str(neighbor[1]))
+				if(loc not in self.map[str(layer)]['grid'] and not exits):
+					area.append(neighbor)
+					queue.append(neighbor)
+
+		for loc in area:
+			self.map[str(layer)]['grid'][str(loc[0]) + '; ' + str(loc[1])] = {'type': tile_type, 'index': index, 'pos': loc}
 
 	def render(self, surf, offset=(0, 0), mode='offgrid grid special physic'):
 		data = self.map.copy()
@@ -123,7 +154,9 @@ class Map:
 			# 	surf.blit(self.game.assets[tile['type']][tile['index']], (tile['pos'][0]-offset[0], tile['pos'][1]-offset[1]))
 
 		if('special' in mode):
-			pass
+			for loc in data['special']:
+				tile = loc
+				surf.blit(self.game.assets[tile['type']][tile['index']], (tile['pos'][0]-offset[0], tile['pos'][1]-offset[1]))
 
 		if('physic' in mode):
 			for x in range(offset[0] // self.tile_size, (offset[0] + surf.get_width()) // self.tile_size + 1):
@@ -193,7 +226,6 @@ class Editor:
 		self.map.map[str(index)] = {
 			'grid': {},
 			'offgrid': [],
-			'cmtree': [],
 		}
 
 	def run(self):
@@ -230,7 +262,6 @@ class Editor:
 					self.create_layer(self.layer)
 
 				if(self.tile_list[self.tile_group] == 'physic'):
-					print(1)
 					ptype = [False, False, False, False, False]
 					ptype[self.tile_index] = True
 					self.map.map['physic'][str(tile_pos[0]) + '; ' + str(tile_pos[1])] = {'type': ptype, 'index': self.tile_index, 'pos': tile_pos}
@@ -240,7 +271,7 @@ class Editor:
 						self.map.map[str(self.layer)]['grid'][str(tile_pos[0]) + '; ' + str(tile_pos[1])] = {'type': self.tile_list[self.tile_group], 'index': self.tile_index, 'pos': tile_pos}
 					else:
 						if(self.tile_list[self.tile_group] == 'cmtree'):
-							self.map.map[str(self.layer)]['cmtree'].append({'type': self.tile_list[self.tile_group], 'index': self.tile_index, 'pos': (mouse_pos[0] + self.scroll[0], mouse_pos[1] + self.scroll[1])})
+							self.map.map['special'].append({'type': self.tile_list[self.tile_group], 'index': self.tile_index, 'pos': (mouse_pos[0] + self.scroll[0], mouse_pos[1] + self.scroll[1])})
 						else:
 							self.map.map[str(self.layer)]['offgrid'].append({'type': self.tile_list[self.tile_group], 'index': self.tile_index, 'pos': (mouse_pos[0] + self.scroll[0], mouse_pos[1] + self.scroll[1])})
 
@@ -257,11 +288,11 @@ class Editor:
 					if(tile_r.colliderect(mouse_rect)):
 						self.map.map[str(self.layer)]['offgrid'].remove(tile)
 
-				for tile in self.map.map[str(self.layer)]['cmtree'].copy():
+				for tile in self.map.map[str(self.layer)]['special'].copy():
 					tile_img = self.assets[tile['type']][tile['index']]
 					tile_r = pygame.Rect(tile['pos'][0] - self.scroll[0], tile['pos'][1] - self.scroll[1], tile_img.get_width(), tile_img.get_height())
 					if(tile_r.colliderect(mouse_rect)):
-						self.map.map[str(self.layer)]['cmtree'].remove(tile)
+						self.map.map[str(self.layer)]['special'].remove(tile)
 
 
 			for event in pygame.event.get():
@@ -315,18 +346,21 @@ class Editor:
 					if event.key == pygame.K_g:
 						self.on_grid = not self.on_grid
 					if event.key == pygame.K_t:
-						self.map.auto_tile()
+						if(self.tile_list[self.tile_group] in AUTO_TILE_TYPES):
+							self.map.auto_tile(self.layer, tile_pos, self.tile_list[self.tile_group])
+					if event.key == pygame.K_r:
+						self.map.auto_fill(self.layer, tile_pos, self.tile_list[self.tile_group], self.tile_index)
 					if event.key == pygame.K_o:
 						self.map.save('map/' + str(INDEX) + '.json')
 
 				if event.type == pygame.KEYUP:
-					if event.key == pygame.K_LEFT:
+					if event.key == pygame.K_a:
 						self.moverment[0] = False
-					if event.key == pygame.K_RIGHT:
+					if event.key == pygame.K_d:
 						self.moverment[1] = False
-					if event.key == pygame.K_UP:
+					if event.key == pygame.K_w:
 						self.moverment[2] = False
-					if event.key == pygame.K_DOWN:
+					if event.key == pygame.K_s:
 						self.moverment[3] = False
 					if event.key == pygame.K_LSHIFT:
 						self.shift = False

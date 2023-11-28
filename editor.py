@@ -21,7 +21,7 @@ PHYSIC_TILES = ['ground_1/type_1', 'ground_1/type_2', 'ground_2', 'black']
 PALLET_TILES = ['pallet']
 AUTO_TILE_TYPES = ['ground_1/type_1']
 
-INDEX = 3
+INDEX = 2
 RENDER_SCALE = 1.6
 
 def load_img(path):
@@ -55,6 +55,7 @@ class Map:
 				'special': [],
 				'physic': {},
 			}
+
 
 	def save(self, path):
 		f = open(path, 'w')
@@ -131,7 +132,6 @@ class Map:
 
 	def render(self, surf, offset=(0, 0), mode='offgrid grid special physic'):
 		data = self.map.copy()
-
 		try:
 			for layer in sorted(data):
 				if('offgrid' in mode):
@@ -191,6 +191,9 @@ class Editor:
 			'black': load_imgs('black'),
 			'pallet': load_imgs('pallet'),
 			'physic': load_imgs('physic'),
+			'fence': load_imgs('fence'),
+			'building_block': load_imgs('building_block'),
+			'building_window': load_imgs('building_window'),
 		}
 			# 'player': load_img('player/idle/1.png'),
 
@@ -209,7 +212,8 @@ class Editor:
 		try:
 			self.map.load('map/' + str(INDEX) + '.json')
 		except FileNotFoundError:
-			pass
+			for i in range(10+1):
+				self.create_layer(i)
 
 		self.tile_size = tile_size
 		self.tile_list = list(self.assets)
@@ -279,6 +283,10 @@ class Editor:
 
 			if(self.right_clicking):
 				loc = str(tile_pos[0]) + '; ' + str(tile_pos[1])
+
+				if(loc in self.map.map['physic']):
+					del self.map.map['physic'][loc]
+
 				if(loc in self.map.map[str(self.layer)]['grid']):
 					del self.map.map[str(self.layer)]['grid'][loc]
 				
@@ -288,11 +296,11 @@ class Editor:
 					if(tile_r.colliderect(mouse_rect)):
 						self.map.map[str(self.layer)]['offgrid'].remove(tile)
 
-				for tile in self.map.map[str(self.layer)]['special'].copy():
+				for tile in self.map.map['special'].copy():
 					tile_img = self.assets[tile['type']][tile['index']]
 					tile_r = pygame.Rect(tile['pos'][0] - self.scroll[0], tile['pos'][1] - self.scroll[1], tile_img.get_width(), tile_img.get_height())
 					if(tile_r.colliderect(mouse_rect)):
-						self.map.map[str(self.layer)]['special'].remove(tile)
+						self.map.map['special'].remove(tile)
 
 
 			for event in pygame.event.get():
